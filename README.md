@@ -8,11 +8,11 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 - usa `fetch` con retries, timeout y headers realistas
 - detecta respuestas bloqueadas por WAF
 - usa Playwright como fallback cuando el fetch normal no basta
-- parsea y normaliza el HTML a un payload canonico
+- parsea y normaliza el HTML a un payload canónico
 - detecta cambios por `normalized_hash`
-- guarda auditoria de corridas, snapshots historicos y tabla actual en PostgreSQL
-- reconstruye Redis despues de una actualizacion valida
-- limpia corridas y snapshots antiguos segun la politica de retencion
+- guarda auditoria de corridas, snapshots históricos y tabla actual en PostgreSQL
+- reconstruye Redis después de una actualización válida
+- limpia corridas y snapshots antiguos según la política de retención
 
 ## Flujo operativo
 
@@ -24,18 +24,18 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 6. compara contra el snapshot actual
 7. si hubo cambios, escribe PostgreSQL y luego refresca Redis
 8. registra la corrida en `scrape_runs`
-9. ejecuta cleanup de retencion
+9. ejecuta cleanup de retención
 
-## Fuente de verdad y cache
+## Fuente de verdad y caché
 
 - PostgreSQL es la fuente de verdad
 - Redis es cache reconstruible
-- el productor escribe PG primero y Redis despues
+- el productor escribe PG primero y Redis después
 - si Redis falla, la corrida queda registrada igual y el API puede seguir leyendo desde PG
 
 ## Tablas que mantiene
 
-- `scrape_runs`: auditoria de cada ejecucion
+- `scrape_runs`: auditoria de cada ejecución
 - `holiday_snapshots`: snapshot completo del dataset
 - `holiday_snapshot_items`: detalle por feriado dentro de cada snapshot
 - `holidays_current`: tabla optimizada para lectura
@@ -51,15 +51,15 @@ Tomadas de [`.env.example`](/media/work/OneDrive/Personal-Git/feriados-api/feria
 - `HTTP_TIMEOUT_MS`: timeout HTTP
 - `HTTP_MAX_RETRIES`: retries del fetch base
 - `USE_PLAYWRIGHT_FALLBACK`: habilita fallback de navegador
-- `SNAPSHOT_RETENTION_DAYS`: retencion de snapshots no vigentes
-- `SCRAPE_RUN_RETENTION_DAYS`: retencion de corridas historicas
-- `QUERY_TRACE_RETENTION_DAYS`: retencion de trazas de consulta del API
+- `SNAPSHOT_RETENTION_DAYS`: retención de snapshots no vigentes
+- `SCRAPE_RUN_RETENTION_DAYS`: retención de corridas históricas
+- `QUERY_TRACE_RETENTION_DAYS`: retención de trazas de consulta del API
 - `REDIS_CACHE_TTL_SECONDS`: TTL de las claves Redis del snapshot actual
 - `DATABASE_URL`: PostgreSQL
 - `REDIS_URL`: Redis
 - `PARSER_VERSION`: version del parser para auditoria
 
-## Comandos utiles
+## Comandos útiles
 
 ```bash
 npm run build
@@ -74,7 +74,7 @@ Que hace cada uno:
 
 - `npm run migrate`: aplica migraciones SQL pendientes
 - `npm run once`: ejecuta una corrida manual completa
-- `npm run cleanup`: ejecuta solo la limpieza de retencion
+- `npm run cleanup`: ejecuta solo la limpieza de retención
 - `npm start`: arranca el proceso cron compilado
 
 Con `pm2`:
@@ -106,8 +106,8 @@ pm2 startOrReload ecosystem.config.cjs --update-env
 
 Campos relevantes:
 
-- `changed`: indica si el payload canonico cambio frente al snapshot actual
-- `persisted`: indica si se escribio un nuevo snapshot
+- `changed`: indica si el payload canónico cambio frente al snapshot actual
+- `persisted`: indica si se escribió un nuevo snapshot
 - `usedBrowserFallback`: indica si fue necesario usar Playwright
 - `cleanup`: resume la limpieza aplicada al final de la corrida
 
@@ -116,12 +116,12 @@ Campos relevantes:
 - lock en PG para evitar ejecuciones concurrentes
 - fallback a navegador ante `403/418` o HTML bloqueado
 - logging estructurado con Pino
-- audit trail tambien para scrapes fallidos
+- audit trail también para scrapes fallidos
 - shutdown limpio ante `SIGTERM` y `SIGINT`
 - persistencia auditable de HTML crudo y payload normalizado
 - refresh de Redis via pipeline
 - TTL en cache Redis para evitar stale infinito si el productor deja de correr
-- cleanup forward-only, sin rollback SQL automatico
+- cleanup forward-only, sin rollback SQL automático
 
 ## Testing
 
