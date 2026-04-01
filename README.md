@@ -43,7 +43,7 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 
 ## Variables de entorno
 
-Tomadas de [`.env.example`](/media/work/OneDrive/Personal-Git/feriados-api/feriados-producer/.env.example):
+Tomadas de [`.env.example`](.env.example):
 
 - `PRODUCER_CRON`: cron del productor. Default `0 0 */12 * * *`
 - `TIMEZONE`: default `America/Lima`
