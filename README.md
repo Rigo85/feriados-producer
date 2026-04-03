@@ -8,9 +8,11 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 - usa `fetch` con retries, timeout y headers realistas
 - detecta respuestas bloqueadas por WAF
 - usa Playwright como fallback cuando el fetch normal no basta
-- parsea y normaliza el HTML a un payload canónico
-- detecta cambios por `normalized_hash`
-- guarda auditoria de corridas, snapshots históricos y tabla actual en PostgreSQL
+- parsea y normaliza el HTML actual de `gob.pe`, incluyendo el bloque ancla y la tabla de próximos feriados
+- detecta cambios por `normalized_hash` sobre lo observado en la fuente
+- reconcilia la observación parcial con un baseline semilla antes de actualizar la proyección actual
+- rechaza promociones sospechosas cuando la fuente parece parcial o cambió de estructura
+- guarda auditoria de corridas, snapshots históricos, eventos de scraping y tabla actual en PostgreSQL
 - reconstruye Redis después de una actualización válida
 - limpia corridas y snapshots antiguos según la política de retención
 
@@ -19,10 +21,12 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 1. descarga `gob.pe/feriados`
 2. valida si hubo bloqueo o HTML inconsistente
 3. cae a navegador si hace falta
-4. parsea y normaliza feriados
-5. calcula hashes del HTML y del payload
-6. compara contra el snapshot actual
-7. si hubo cambios, escribe PostgreSQL y luego refresca Redis
+4. parsea feriados observados desde el bloque ancla y la tabla de próximos
+5. calcula hashes del HTML y del payload observado
+6. compara contra el snapshot observado actual
+7. reconcilia observación + baseline anual
+8. si la promoción es válida, escribe PostgreSQL y luego refresca Redis
+9. si la promoción es rechazada, mantiene la proyección actual y registra el motivo
 8. registra la corrida en `scrape_runs`
 9. ejecuta cleanup de retención
 
@@ -36,9 +40,11 @@ Servicio responsable de obtener, normalizar, auditar y publicar snapshots de fer
 ## Tablas que mantiene
 
 - `scrape_runs`: auditoria de cada ejecución
-- `holiday_snapshots`: snapshot completo del dataset
-- `holiday_snapshot_items`: detalle por feriado dentro de cada snapshot
-- `holidays_current`: tabla optimizada para lectura
+- `scrape_run_events`: eventos estructurados de reconciliación y rechazo/promoción
+- `holiday_snapshots`: snapshot observado del scrape
+- `holiday_snapshot_items`: detalle observado por feriado dentro de cada snapshot
+- `holiday_baselines`: semilla anual de respaldo para años soportados
+- `holidays_current`: proyección reconciliada y optimizada para lectura
 - `schema_migrations`: control de migraciones aplicadas
 
 ## Variables de entorno
@@ -55,6 +61,8 @@ Tomadas de [`.env.example`](.env.example):
 - `SCRAPE_RUN_RETENTION_DAYS`: retención de corridas históricas
 - `QUERY_TRACE_RETENTION_DAYS`: retención de trazas de consulta del API
 - `REDIS_CACHE_TTL_SECONDS`: TTL de las claves Redis del snapshot actual
+- `MAX_ALLOWED_MISSING_FUTURE_HOLIDAYS`: umbral absoluto de futuros faltantes aceptables antes de rechazar promoción
+- `MIN_OBSERVED_COVERAGE_RATIO`: cobertura mínima observada contra el baseline restante
 - `DATABASE_URL`: PostgreSQL
 - `REDIS_URL`: Redis
 - `PARSER_VERSION`: version del parser para auditoria
@@ -109,12 +117,15 @@ Campos relevantes:
 - `changed`: indica si el payload canónico cambio frente al snapshot actual
 - `persisted`: indica si se escribió un nuevo snapshot
 - `usedBrowserFallback`: indica si fue necesario usar Playwright
+- `holidayCount`: cantidad observada en la fuente, no necesariamente la proyección final servida por el API
 - `cleanup`: resume la limpieza aplicada al final de la corrida
 
 ## Robustez actual
 
 - lock en PG para evitar ejecuciones concurrentes
 - fallback a navegador ante `403/418` o HTML bloqueado
+- baseline 2026 para no perder feriados pasados cuando `gob.pe` solo muestra presente y futuros
+- reconciliación que acepta desapariciones puntuales futuras, pero rechaza snapshots demasiado parciales
 - logging estructurado con Pino
 - audit trail también para scrapes fallidos
 - shutdown limpio ante `SIGTERM` y `SIGINT`

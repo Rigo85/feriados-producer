@@ -12,6 +12,13 @@ function createScrapeResult() {
     parsed: {
       year: 2026,
       title: 'Feriados 2026',
+      diagnostics: {
+        recentHolidayFound: true,
+        desktopRowCount: 1,
+        mobileRowCount: 0,
+        selectedUpcomingMode: 'desktop' as const,
+        regionalEmptyStateDetected: false
+      },
       holidays: [
         {
           date: '2026-07-28',
@@ -60,12 +67,45 @@ test('persists a new snapshot and refreshes cache when the normalized hash chang
           record_count: 14
         };
       },
-      async replaceCurrentSnapshot() {
+      async getCurrentProjection() {
+        calls.push('getCurrentProjection');
+        return [];
+      },
+      async getBaselineHolidays() {
+        calls.push('getBaselineHolidays');
+        return [
+          {
+            date: '2026-01-01',
+            year: 2026,
+            month: 1,
+            day: 1,
+            name: 'Año Nuevo',
+            scope: 'national' as const,
+            notes: null,
+            sourceLabel: 'seed_2026_table'
+          },
+          {
+            date: '2026-07-28',
+            year: 2026,
+            month: 7,
+            day: 28,
+            name: 'Fiestas Patrias',
+            scope: 'national' as const,
+            notes: null,
+            sourceLabel: 'seed_2026_table'
+          }
+        ];
+      },
+      async replaceCurrentSnapshot(input: { projectedHolidays: Array<{ sourceOfTruth: string }> }) {
         calls.push('replaceCurrentSnapshot');
+        assert.equal(input.projectedHolidays.length, 2);
         return {
           snapshotId: '10',
           fetchedAt: '2026-03-31T15:00:00.000Z'
         };
+      },
+      async insertRunEvents() {
+        calls.push('insertRunEvents');
       },
       async finishRun(_runId: string, fields: { changed?: boolean; snapshotId?: string; status: string }) {
         calls.push(`finishRun:${fields.status}:${String(fields.changed)}:${fields.snapshotId || 'none'}`);
@@ -83,6 +123,8 @@ test('persists a new snapshot and refreshes cache when the normalized hash chang
     runId: '1',
     sourceUrl: 'https://www.gob.pe/feriados',
     parserVersion: '2026-03-31.1',
+    maxAllowedMissingFutureHolidays: 2,
+    minObservedCoverageRatio: 0.75,
     scrapeResult: createScrapeResult()
   });
 
@@ -92,7 +134,10 @@ test('persists a new snapshot and refreshes cache when the normalized hash chang
   assert.deepEqual(calls, [
     'tryAcquireLock',
     'getCurrentSnapshot',
+    'getCurrentProjection',
+    'getBaselineHolidays',
     'replaceCurrentSnapshot',
+    'insertRunEvents',
     'refreshCurrentSnapshot',
     'finishRun:success:true:10',
     'releaseLock'
@@ -116,8 +161,55 @@ test('skips persistence when the snapshot hash did not change', async () => {
           record_count: 15
         };
       },
+      async getCurrentProjection() {
+        return [
+          {
+            date: '2026-01-01',
+            year: 2026,
+            month: 1,
+            day: 1,
+            name: 'Año Nuevo',
+            scope: 'national' as const
+          },
+          {
+            date: '2026-07-28',
+            year: 2026,
+            month: 7,
+            day: 28,
+            name: 'Fiestas Patrias',
+            scope: 'national' as const
+          }
+        ];
+      },
+      async getBaselineHolidays() {
+        return [
+          {
+            date: '2026-01-01',
+            year: 2026,
+            month: 1,
+            day: 1,
+            name: 'Año Nuevo',
+            scope: 'national' as const,
+            notes: null,
+            sourceLabel: 'seed_2026_table'
+          },
+          {
+            date: '2026-07-28',
+            year: 2026,
+            month: 7,
+            day: 28,
+            name: 'Fiestas Patrias',
+            scope: 'national' as const,
+            notes: null,
+            sourceLabel: 'seed_2026_table'
+          }
+        ];
+      },
       async replaceCurrentSnapshot() {
         throw new Error('should not persist unchanged snapshot');
+      },
+      async insertRunEvents() {
+        throw new Error('should not insert events for an unchanged snapshot');
       },
       async finishRun() {},
       async releaseLock() {}
@@ -131,6 +223,8 @@ test('skips persistence when the snapshot hash did not change', async () => {
     runId: '1',
     sourceUrl: 'https://www.gob.pe/feriados',
     parserVersion: '2026-03-31.1',
+    maxAllowedMissingFutureHolidays: 2,
+    minObservedCoverageRatio: 0.75,
     scrapeResult: createScrapeResult()
   });
 
@@ -150,8 +244,17 @@ test('skips the run when the advisory lock cannot be acquired', async () => {
       async getCurrentSnapshot() {
         throw new Error('should not query current snapshot without lock');
       },
+      async getCurrentProjection() {
+        throw new Error('should not query current projection without lock');
+      },
+      async getBaselineHolidays() {
+        throw new Error('should not query baseline without lock');
+      },
       async replaceCurrentSnapshot() {
         throw new Error('should not persist without lock');
+      },
+      async insertRunEvents() {
+        throw new Error('should not persist events without lock');
       },
       async finishRun(_runId: string, fields: { status: string }) {
         finishStatus = fields.status;
@@ -165,6 +268,8 @@ test('skips the run when the advisory lock cannot be acquired', async () => {
     runId: '1',
     sourceUrl: 'https://www.gob.pe/feriados',
     parserVersion: '2026-03-31.1',
+    maxAllowedMissingFutureHolidays: 2,
+    minObservedCoverageRatio: 0.75,
     scrapeResult: createScrapeResult()
   });
 

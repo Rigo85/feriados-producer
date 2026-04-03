@@ -14,6 +14,8 @@ export interface EnvConfig {
   scrapeRunRetentionDays: number;
   queryTraceRetentionDays: number;
   redisCacheTtlSeconds: number;
+  maxAllowedMissingFutureHolidays: number;
+  minObservedCoverageRatio: number;
   databaseUrl: string;
   redisUrl: string;
 }
@@ -27,10 +29,28 @@ export interface HolidayRecord {
   scope: 'national';
 }
 
+export interface BaselineHolidayRecord extends HolidayRecord {
+  notes: string | null;
+  sourceLabel: string;
+}
+
+export interface ProjectedHolidayRecord extends HolidayRecord {
+  sourceOfTruth: 'baseline' | 'gobpe';
+}
+
+export interface ParserDiagnostics {
+  recentHolidayFound: boolean;
+  desktopRowCount: number;
+  mobileRowCount: number;
+  selectedUpcomingMode: 'desktop' | 'mobile' | 'none';
+  regionalEmptyStateDetected: boolean;
+}
+
 export interface ParsedHolidayPage {
   year: number;
   title: string;
   holidays: HolidayRecord[];
+  diagnostics: ParserDiagnostics;
 }
 
 export interface ScrapeResultBlocked {
@@ -80,7 +100,11 @@ export interface SyncSnapshotResult {
   changed: boolean;
   persisted: boolean;
   skipped?: boolean;
+  rejected?: boolean;
   snapshotId?: string;
+  projectedHolidayCount?: number;
+  observedHolidayCount?: number;
+  rejectionCode?: string;
   cleanup?: CleanupResult;
 }
 
@@ -90,4 +114,26 @@ export interface CleanupResult {
   deletedRuns: number;
   deletedSnapshots: number;
   deletedQueryTraces: number;
+}
+
+export interface RunEvent {
+  level: 'info' | 'warn' | 'error';
+  code: string;
+  message: string;
+  holidayDate?: string;
+  scope?: 'national';
+  details?: Record<string, unknown>;
+}
+
+export interface ReconciliationResult {
+  accepted: boolean;
+  projectedHolidays: ProjectedHolidayRecord[];
+  anchorDate: string | null;
+  expectedRemainingCount: number;
+  observedCount: number;
+  missingFutureCount: number;
+  coverageRatio: number;
+  events: RunEvent[];
+  rejectionCode?: string;
+  rejectionMessage?: string;
 }

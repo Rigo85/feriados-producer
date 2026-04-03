@@ -25,6 +25,8 @@ const baseEnv = {
   scrapeRunRetentionDays: 180,
   queryTraceRetentionDays: 90,
   redisCacheTtlSeconds: 172800,
+  maxAllowedMissingFutureHolidays: 2,
+  minObservedCoverageRatio: 0.75,
   databaseUrl: '',
   redisUrl: ''
 } as const;

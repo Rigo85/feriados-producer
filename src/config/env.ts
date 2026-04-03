@@ -36,6 +36,8 @@ export function loadEnv(): EnvConfig {
     scrapeRunRetentionDays: getEnvNumber('SCRAPE_RUN_RETENTION_DAYS', 180),
     queryTraceRetentionDays: getEnvNumber('QUERY_TRACE_RETENTION_DAYS', 90),
     redisCacheTtlSeconds: getEnvNumber('REDIS_CACHE_TTL_SECONDS', 172800),
+    maxAllowedMissingFutureHolidays: getEnvNumber('MAX_ALLOWED_MISSING_FUTURE_HOLIDAYS', 2),
+    minObservedCoverageRatio: getEnvNumber('MIN_OBSERVED_COVERAGE_RATIO', 0.75),
     databaseUrl: process.env.DATABASE_URL || '',
     redisUrl: process.env.REDIS_URL || ''
   };

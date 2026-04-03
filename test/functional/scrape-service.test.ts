@@ -56,7 +56,8 @@ test('uses browser fallback when the origin is blocked and fallback is enabled',
     assert.equal(result.ok, true);
     assert.equal(result.usedBrowserFallback, true);
     assert.equal(browserFallbackCalls, 1);
-    assert.ok(result.normalizedPayload.holidays.length > 0);
+    assert.equal(result.normalizedPayload.holidays.length, 15);
+    assert.equal(result.parsed.diagnostics.selectedUpcomingMode, 'desktop');
   } finally {
     global.fetch = originalFetch;
   }

@@ -2,9 +2,12 @@ import type { Pool } from 'pg';
 
 import { withTransaction } from '../db/postgres';
 import type {
+  BaselineHolidayRecord,
   CurrentSnapshotRow,
   HolidayRecord,
   PersistedSnapshot,
+  ProjectedHolidayRecord,
+  RunEvent,
   RunRow
 } from '../types';
 
@@ -19,6 +22,7 @@ interface SnapshotInput {
     holidays: HolidayRecord[];
   };
   holidays: HolidayRecord[];
+  projectedHolidays: ProjectedHolidayRecord[];
 }
 
 export function createSnapshotRepository(pool: Pool | null) {
@@ -50,6 +54,55 @@ export function createSnapshotRepository(pool: Pool | null) {
     `);
 
     return result.rows[0] || null;
+  }
+
+  async function getCurrentProjection(): Promise<HolidayRecord[]> {
+    const result = await db.query<HolidayRecord>(`
+      SELECT holiday_date::text AS date, year, month, day, name, scope
+      FROM holidays_current
+      ORDER BY holiday_date ASC
+    `);
+
+    return result.rows;
+  }
+
+  async function getBaselineHolidays(year: number, scope: 'national' = 'national'): Promise<BaselineHolidayRecord[]> {
+    const result = await db.query<{
+      holiday_date: string;
+      year: number;
+      month: number;
+      day: number;
+      name: string;
+      scope: 'national';
+      notes: string | null;
+      source_label: string;
+    }>(`
+      SELECT
+        holiday_date::text AS holiday_date,
+        year,
+        month,
+        day,
+        name,
+        scope,
+        notes,
+        source_label
+      FROM holiday_baselines
+      WHERE year = $1
+        AND scope = $2
+        AND is_active = TRUE
+      ORDER BY holiday_date ASC
+    `, [year, scope]);
+
+    return result.rows.map((row) => ({
+      date: row.holiday_date,
+      year: row.year,
+      month: row.month,
+      day: row.day,
+      name: row.name,
+      scope: row.scope,
+      notes: row.notes,
+      sourceLabel: row.source_label
+    }));
   }
 
   async function insertRunStart(trigger: string): Promise<RunRow> {
@@ -94,6 +147,35 @@ export function createSnapshotRepository(pool: Pool | null) {
       fields.errorMessage || null,
       fields.snapshotId || null
     ]);
+  }
+
+  async function insertRunEvents(runId: string, events: RunEvent[]): Promise<void> {
+    if (events.length === 0) {
+      return;
+    }
+
+    for (const event of events) {
+      await db.query(`
+        INSERT INTO scrape_run_events (
+          run_id,
+          level,
+          code,
+          holiday_date,
+          scope,
+          message,
+          details_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      `, [
+        runId,
+        event.level,
+        event.code,
+        event.holidayDate || null,
+        event.scope || null,
+        event.message,
+        JSON.stringify(event.details || {})
+      ]);
+    }
   }
 
   async function replaceCurrentSnapshot(snapshot: SnapshotInput): Promise<PersistedSnapshot> {
@@ -151,7 +233,7 @@ export function createSnapshotRepository(pool: Pool | null) {
 
       await client.query('DELETE FROM holidays_current');
 
-      for (const holiday of snapshot.holidays) {
+      for (const holiday of snapshot.projectedHolidays) {
         await client.query(`
           INSERT INTO holidays_current (
             holiday_date,
@@ -160,9 +242,11 @@ export function createSnapshotRepository(pool: Pool | null) {
             day,
             name,
             scope,
-            snapshot_id
+            snapshot_id,
+            source_of_truth,
+            last_confirmed_snapshot_id
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [
           holiday.date,
           holiday.year,
@@ -170,7 +254,9 @@ export function createSnapshotRepository(pool: Pool | null) {
           holiday.day,
           holiday.name,
           holiday.scope,
-          snapshotId
+          snapshotId,
+          holiday.sourceOfTruth,
+          holiday.sourceOfTruth === 'gobpe' ? snapshotId : null
         ]);
       }
 
@@ -215,7 +301,10 @@ export function createSnapshotRepository(pool: Pool | null) {
     cleanupOldRuns,
     cleanupOldSnapshots,
     finishRun,
+    getBaselineHolidays,
+    getCurrentProjection,
     getCurrentSnapshot,
+    insertRunEvents,
     insertRunStart,
     ping,
     releaseLock,

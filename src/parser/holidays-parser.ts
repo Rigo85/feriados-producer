@@ -61,34 +61,47 @@ function parseRecentHoliday($: cheerio.CheerioAPI, year: number): HolidayRecord 
   };
 }
 
-function parseHolidayList($: cheerio.CheerioAPI, year: number): HolidayRecord[] {
-  return $('.holidays__list-item')
+function parseDateAndName(year: number, rawDate: string, rawName: string): HolidayRecord {
+  const match = normalizeWhitespace(rawDate).match(/(?:[A-Za-zÁÉÍÓÚáéíóúñÑ]+\s+)?(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i);
+  const name = normalizeWhitespace(rawName);
+
+  if (!match || !name) {
+    throw new Error(`Unexpected holiday row format: ${rawDate} ${rawName}`);
+  }
+
+  const day = match[1]!;
+  const monthName = match[2]!;
+
+  return {
+    date: buildIsoDate(year, day, monthName),
+    year,
+    month: Number(MONTHS[monthName.toLowerCase()]!),
+    day: Number(day),
+    name,
+    scope: 'national'
+  };
+}
+
+function parseDesktopHolidayTable($: cheerio.CheerioAPI, year: number): HolidayRecord[] {
+  return $('.table-holidays tbody tr')
     .toArray()
-    .map((element): HolidayRecord => {
-      const parts = $(element)
-        .find('.holidays__list-item-date')
-        .toArray()
-        .map((node) => normalizeWhitespace($(node).text()));
+    .map((element) => {
+      const cells = $(element).find('td').toArray();
+      const rawDate = normalizeWhitespace($(cells[1] || element).text());
+      const rawName = normalizeWhitespace($(cells[2] || element).text());
 
-      const name = normalizeWhitespace($(element).find('.holidays__list-item-name').text());
-      const joinedDate = normalizeWhitespace(parts.join(' '));
-      const match = joinedDate.match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i);
+      return parseDateAndName(year, rawDate, rawName);
+    });
+}
 
-      if (!match || !name) {
-        throw new Error(`Unexpected holiday list item format: ${joinedDate} ${name}`);
-      }
+function parseMobileHolidayTable($: cheerio.CheerioAPI, year: number): HolidayRecord[] {
+  return $('.table-holidays__mobile-row')
+    .toArray()
+    .map((element) => {
+      const rawDate = normalizeWhitespace($(element).find('.table-holidays__mobile-date').text());
+      const rawName = normalizeWhitespace($(element).find('.table-holidays__mobile-name').text());
 
-      const day = match[1]!;
-      const monthName = match[2]!;
-
-      return {
-        date: buildIsoDate(year, day, monthName),
-        year,
-        month: Number(MONTHS[monthName.toLowerCase()]!),
-        day: Number(day),
-        name,
-        scope: 'national'
-      };
+      return parseDateAndName(year, rawDate, rawName);
     });
 }
 
@@ -122,12 +135,21 @@ export function parseHolidayPage(html: string): ParsedHolidayPage {
 
   const year = Number(yearMatch[1]);
   const recentHoliday = parseRecentHoliday($, year);
-  const holidayList = parseHolidayList($, year);
+  const desktopHolidayList = parseDesktopHolidayTable($, year);
+  const mobileHolidayList = parseMobileHolidayTable($, year);
+  const holidayList = desktopHolidayList.length > 0 ? desktopHolidayList : mobileHolidayList;
   const holidays = dedupeByDate([recentHoliday, ...holidayList].filter((value): value is HolidayRecord => Boolean(value)));
 
   return {
     year,
     title,
-    holidays
+    holidays,
+    diagnostics: {
+      recentHolidayFound: Boolean(recentHoliday),
+      desktopRowCount: desktopHolidayList.length,
+      mobileRowCount: mobileHolidayList.length,
+      selectedUpcomingMode: desktopHolidayList.length > 0 ? 'desktop' : (mobileHolidayList.length > 0 ? 'mobile' : 'none'),
+      regionalEmptyStateDetected: /No hay próximos feriados regionales en este año/i.test($.text())
+    }
   };
 }

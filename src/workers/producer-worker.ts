@@ -59,6 +59,8 @@ export function createProducerWorker(dependencies: ProducerDependencies) {
           runId: run.id,
           sourceUrl: env.holidaysSourceUrl,
           parserVersion: env.parserVersion,
+          maxAllowedMissingFutureHolidays: env.maxAllowedMissingFutureHolidays,
+          minObservedCoverageRatio: env.minObservedCoverageRatio,
           scrapeResult: result
         });
 
@@ -81,6 +83,8 @@ export function createProducerWorker(dependencies: ProducerDependencies) {
           ok: result.ok,
           statusCode: result.statusCode,
           usedBrowserFallback: result.usedBrowserFallback,
+          holidayCount: result.ok ? result.parsed.holidays.length : null,
+          parserDiagnostics: result.ok ? result.parsed.diagnostics : null,
           sync: result.ok ? (result.sync || null) : null
         },
         'producer run finished'
